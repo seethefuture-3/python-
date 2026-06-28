@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    
+    <title>index</title>
+    <style>
+        body::before{
+            display: block;
+            content: '';
+            height: 56px;
+        }
+        /* 使外部容器（如<section>）相对定位，以便内部绝对定位生效 */
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="{{ url_for('index') }}" style="padding-left: 2%;">python</a>
+        <div class="collapse navbar-collapse justify-content-end" id="navbarNav" style="padding-right: 2%;">
+            <ul class="navbar-nav ml-auto">
+                {% if name %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('login') }}">{{ name }}</a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+
+    <!-- web标题 -->
+    <section class="p-5 bg-dark text-light text-center text-sm-start">
+        <div class="container">
+            <h1 class="text-center"><span class="text-warning">python</span>大作业</h1>
+        </div>
+    </section>
+
+    <!-- 上市公司数据可视化 -->
+    <section class="p-5 text-center text-sm-start mt-5">
+        <div class="container">
+            <h2><span class="text-primary">上市公司数据</span>可视化</h2>   
+            <!-- 各个省份、成立日期、上市日期、员工人数、注册资金   -->
+            <div id="pie-chart" style="width: 100%; height: 650px;" ></div>
+
+            <form id="search_companies_form">
+                <div class="form-group">
+                    <label for="searchColumn">依据列名:</label>
+                    <select class="form-control" id="searchColumn">
+                        <option value="Stock_code">股票代码</option>
+                        <option value="Stock_name">股票名称</option>
+                        <option value="Company_name">公司名称</option>
+                        <option value="Province">省份</option>
+                        <option value="Product">主营产品</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="keyword">关键字:</label>
+                    <input type="text" class="form-control" id="keyword" placeholder="请输入关键字">
+                </div>
+                <button type="submit" class="btn btn-primary mt-2">搜索</button>
+            </form>
+            <hr>
+            <table class="table table-striped" id="resultTable">
+                <tbody></tbody>
+            </table>
+            <nav aria-label="Page navigation example">
+                <ul class="pagination justify-content-center" id="pagination">
+                    <!-- 分页链接将通过JavaScript动态生成 -->
+                </ul>
+            </nav>
+        </div>
+    </section>
+
+    
+    
+    <!-- 上市公司省份计数饼状图 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="{{ url_for('static', filename = 'js/echarts.js') }}"></script>
+    <script type="text/javascript">
+        var pieChart = echarts.init(document.getElementById('pie-chart'));
+        fetch("{{ url_for('static', filename = '/data/SSGS_province_counts.json') }}")
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("HTTP error" + reponse.status);
+                }
+                return response.json();
+            })
+            .then(provinceData => {
+                var pieOption = {
+                    title: {
+                        text: '各个省份上市公司数目'
+                    },
+                    tooltip: {
+                        trigger: 'item'
+                    },
+                    series: [{
+                        // name: 
+                        type: 'pie',
+                        data: Object.entries(provinceData).map(([name, value]) => ({name, value}))
+                    }]
+                };
+                pieChart.setOption(pieOption);
+            })
+            .catch(error => console.error("Failed to load JSON file:", error));
+    </script>
+    
+    <!-- 上市公司搜索 -->
+    <script>
+        document.getElementById('search_companies_form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            let searchColumn = document.getElementById('searchColumn').value;
+            let keyword = document.getElementById('keyword').value;
+            let params = new URLSearchParams();
+            params.append('column', searchColumn);
+            params.append('keyword', keyword);
+            // console.log(searchColumn)
+            // console.log(keyword)
+
+            fetch("{{ url_for('search') }}?" + params.toString(), {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 处理返回的数据，更新表格和分页
+                console.log(data.results)
+                updateTable(data.results);
+                generatePagination(data.total_pages, data.current_page);
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        function updateTable(results, showHeaders = true) {
+            let tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = ''; // 清空现有内容
+            
+            if (showHeaders && results.length > 0) {
+                let headerRow = tableBody.insertRow();
+                Object.keys(results[0]).forEach(key => {
+                    let headerCell = headerRow.insertCell();
+                    headerCell.textContent = key; // 使用键作为列名
+                    headerCell.classList.add('table-header'); // 可选：添加类以样式化表头
+                });
+            }
+
+            results.forEach(result => {
+                let row = tableBody.insertRow();
+                Object.keys(result).forEach(key => {
+                    let cell = row.insertCell();
+                    cell.textContent = result[key];
+                });
+            });
+        }
+
+        function generatePagination(totalPages, currentPage) {
+            let paginationContainer = document.getElementById('pagination');
+            paginationContainer.innerHTML = ''; // 清空现有分页链接
+
+            for(let i = 1; i <= totalPages; i++) {
+                let listItem = document.createElement('li');
+                listItem.classList.add('page-item');
+                if (i === currentPage) listItem.classList.add('active');
+
+                let link = document.createElement('a');
+                link.classList.add('page-link');
+                link.href = '#';
+                link.textContent = i;
+                link.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    fetchDataForPage(i);
+                });
+
+                listItem.appendChild(link);
+                paginationContainer.appendChild(listItem);
+            }
+        }
+
+
+        function fetchDataForPage(page) {
+            let searchColumn = document.getElementById('searchColumn').value;
+            let keyword = document.getElementById('keyword').value;
+
+            fetch(`/search?page=${page}&column=${searchColumn}&keyword=${keyword}`)
+            .then(response => response.json())
+            .then(data => {
+                updateTable(data.results);
+                generatePagination(data.total_pages, data.current_page);
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+</body>
+</html>
